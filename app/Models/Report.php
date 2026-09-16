@@ -41,4 +41,31 @@ class Report extends Model
     {
         return $this->hasMany(ReportImage::class);
     }
+
+    public function lostMatches(): HasMany
+    {
+        return $this->hasMany(ReportMatch::class, 'lost_report_id');
+    }
+
+    public function foundMatches(): HasMany
+    {
+        return $this->hasMany(ReportMatch::class, 'found_report_id');
+    }
+
+    public function claims(): HasMany
+    {
+        return $this->hasMany(Claim::class);
+    }
+
+    public function returns(): HasMany
+    {
+        return $this->hasMany(ReportReturn::class);
+    }
+
+    protected function casts(): array
+    {
+        return [
+            'event_date' => 'date',
+        ];
+    }
 }

@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
+use App\Notifications\EmailVerificationOtpNotification;
+use App\Services\EmailVerificationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -22,11 +24,25 @@ class AuthenticatedSessionController extends Controller
     /**
      * Handle an incoming authentication request.
      */
-    public function store(LoginRequest $request): RedirectResponse
-    {
+    public function store(
+        LoginRequest $request,
+        EmailVerificationService $verificationService
+    ): RedirectResponse {
         $request->authenticate();
 
         $request->session()->regenerate();
+
+        $user = $request->user();
+
+        if (! $user->email_verified_at) {
+            $otp = $verificationService->generate($user);
+
+            $user->notify(
+                new EmailVerificationOtpNotification($otp)
+            );
+
+            return redirect()->route('otp.show');
+        }
 
         return redirect()->intended(route('dashboard', absolute: false));
     }

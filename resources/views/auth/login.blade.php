@@ -5,11 +5,11 @@
     <form method="POST" action="{{ route('login') }}">
         @csrf
 
-        <!-- Email Address -->
+        <!-- NIM/NIDN -->
         <div>
-            <x-input-label for="email" :value="__('Email')" />
-            <x-text-input id="email" class="block mt-1 w-full" type="email" name="email" :value="old('email')" required autofocus autocomplete="username" />
-            <x-input-error :messages="$errors->get('email')" class="mt-2" />
+        <x-input-label for="nim_nidn" :value="__('NIM/NIDN')" />
+            <x-text-input id="nim_nidn" class="block mt-1 w-full" type="text" name="nim_nidn" :value="old('nim_nidn')" required autofocus autocomplete="username" />
+            <x-input-error :messages="$errors->get('nim_nidn')" class="mt-2" />
         </div>
 
         <!-- Password -->

@@ -6,93 +6,122 @@ use App\Models\Category;
 use App\Models\Location;
 use App\Models\Report;
 use App\Models\ReportImage;
+use App\Rules\NoEmoji;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Storage;
 
 class ReportController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
-    public function index()
+    public function index(Request $request)
     {
+        $search = $request->input('search');
+        $type = $request->input('type');
+        $categoryId = $request->input('category_id');
+        $locationId = $request->input('location_id');
+
+        $categories = Category::all();
+        $locations = Location::all();
+
         $reports = Report::with([
             'user',
             'category',
             'location',
             'images',
-        ])->latest()->get();
+        ])
+            ->when($search, function ($query, $search) {
+                $query->where(function ($query) use ($search) {
+                    $query->where('title', 'like', '%' . $search . '%')
+                        ->orWhere('description', 'like', '%' . $search . '%')
+                        ->orWhere('brand', 'like', '%' . $search . '%')
+                        ->orWhere('color', 'like', '%' . $search . '%');
+                });
+            })
+            ->when($type, function ($query, $type) {
+                $query->where('type', $type);
+            })
+            ->when($categoryId, function ($query, $categoryId) {
+                $query->where('category_id', $categoryId);
+            })
+            ->when($locationId, function ($query, $locationId) {
+                $query->where('location_id', $locationId);
+            })
+            ->latest()
+            ->paginate(10)
+            ->withQueryString();
 
-        return view('reports.index', compact('reports'));
+        return view('reports.index', compact(
+            'reports',
+            'search',
+            'type',
+            'categoryId',
+            'locationId',
+            'categories',
+            'locations'
+        ));
     }
 
-    /**
-     * Show the form for creating a new resource.
-     */
     public function create()
     {
         $categories = Category::all();
         $locations = Location::all();
 
-        return view('reports.create', compact('categories', 'locations'));
+        return view('reports.create', compact(
+            'categories',
+            'locations'
+        ));
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'type' => ['required', 'in:LOST,FOUND'],
-
+            'type' => [
+                'required',
+                'in:LOST,FOUND',
+            ],
             'category_id' => [
                 'required',
                 'exists:categories,id',
             ],
-
             'location_id' => [
                 'required',
                 'exists:locations,id',
             ],
-
             'title' => [
                 'required',
                 'string',
                 'max:150',
+                new NoEmoji,
             ],
-
             'description' => [
                 'required',
                 'string',
             ],
-
             'brand' => [
                 'nullable',
                 'string',
                 'max:100',
+                new NoEmoji,
             ],
-
             'color' => [
                 'nullable',
                 'string',
                 'max:50',
+                new NoEmoji,
             ],
-
             'event_date' => [
                 'required',
                 'date',
             ],
-
             'contact_info' => [
                 'nullable',
                 'string',
                 'max:255',
             ],
-
             'images' => [
                 'nullable',
                 'array',
             ],
-
             'images.*' => [
                 'image',
                 'mimes:jpg,jpeg,png,webp',
@@ -100,16 +129,12 @@ class ReportController extends Controller
             ],
         ]);
 
-        // Tambahkan user yang sedang login
         $validated['user_id'] = auth()->id();
 
-        // Simpan data laporan
         $report = Report::create($validated);
 
-        // Simpan foto jika ada
         if ($request->hasFile('images')) {
             foreach ($request->file('images') as $image) {
-
                 $path = $image->store('reports', 'public');
 
                 ReportImage::create([
@@ -125,9 +150,6 @@ class ReportController extends Controller
             ->with('success', 'Laporan berhasil dibuat.');
     }
 
-    /**
-     * Display the specified resource.
-     */
     public function show(Report $report)
     {
         $report->load([
@@ -137,129 +159,138 @@ class ReportController extends Controller
             'images',
         ]);
 
-        return view('reports.show', compact('report'));
+        $matches = $report->type === 'LOST'
+            ? $report->lostMatches()
+                ->with([
+                    'foundReport.category',
+                    'foundReport.location',
+                    'foundReport.images',
+                ])
+                ->where('status', 'SUGGESTED')
+                ->orderByDesc('score')
+                ->get()
+            : $report->foundMatches()
+                ->with([
+                    'lostReport.category',
+                    'lostReport.location',
+                    'lostReport.images',
+                ])
+                ->where('status', 'SUGGESTED')
+                ->orderByDesc('score')
+                ->get();
+
+        return view('reports.show', compact(
+            'report',
+            'matches'
+        ));
     }
 
-    /**
-     * Show the form for editing the specified resource.
-     */
     public function edit(Report $report)
     {
+        Gate::authorize('update', $report);
+
         $categories = Category::all();
-    $locations = Location::all();
+        $locations = Location::all();
 
-    $report->load('images');
+        $report->load('images');
 
-    return view('reports.edit', compact(
-        'report',
-        'categories',
-        'locations'
-    ));
+        return view('reports.edit', compact(
+            'report',
+            'categories',
+            'locations'
+        ));
     }
 
-    /**
-     * Update the specified resource in storage.
-     */
     public function update(Request $request, Report $report)
     {
-         $validated = $request->validate([
-        'type' => ['required', 'in:LOST,FOUND'],
+        Gate::authorize('update', $report);
 
-        'category_id' => [
-            'required',
-            'exists:categories,id',
-        ],
+        $validated = $request->validate([
+            'type' => [
+                'required',
+                'in:LOST,FOUND',
+            ],
+            'category_id' => [
+                'required',
+                'exists:categories,id',
+            ],
+            'location_id' => [
+                'required',
+                'exists:locations,id',
+            ],
+            'title' => [
+                'required',
+                'string',
+                'max:150',
+                new NoEmoji,
+            ],
+            'description' => [
+                'required',
+                'string',
+            ],
+            'brand' => [
+                'nullable',
+                'string',
+                'max:100',
+                new NoEmoji,
+            ],
+            'color' => [
+                'nullable',
+                'string',
+                'max:50',
+                new NoEmoji,
+            ],
+            'event_date' => [
+                'required',
+                'date',
+            ],
+            'contact_info' => [
+                'nullable',
+                'string',
+                'max:255',
+            ],
+            'images' => [
+                'nullable',
+                'array',
+            ],
+            'images.*' => [
+                'image',
+                'mimes:jpg,jpeg,png,webp',
+                'max:5120',
+            ],
+        ]);
 
-        'location_id' => [
-            'required',
-            'exists:locations,id',
-        ],
+        $report->update($validated);
 
-        'title' => [
-            'required',
-            'string',
-            'max:150',
-        ],
+        if ($request->hasFile('images')) {
+            foreach ($request->file('images') as $image) {
+                $path = $image->store('reports', 'public');
 
-        'description' => [
-            'required',
-            'string',
-        ],
-
-        'brand' => [
-            'nullable',
-            'string',
-            'max:100',
-        ],
-
-        'color' => [
-            'nullable',
-            'string',
-            'max:50',
-        ],
-
-        'event_date' => [
-            'required',
-            'date',
-        ],
-
-        'contact_info' => [
-            'nullable',
-            'string',
-            'max:255',
-        ],
-
-        'images' => [
-            'nullable',
-            'array',
-        ],
-
-        'images.*' => [
-            'image',
-            'mimes:jpg,jpeg,png,webp',
-            'max:5120',
-        ],
-    ]);
-
-    // Update data laporan
-    $report->update($validated);
-
-    // Tambahkan foto baru jika ada
-    if ($request->hasFile('images')) {
-        foreach ($request->file('images') as $image) {
-
-            $path = $image->store('reports', 'public');
-
-            ReportImage::create([
-                'report_id' => $report->id,
-                'path' => $path,
-                'original_name' => $image->getClientOriginalName(),
-            ]);
+                ReportImage::create([
+                    'report_id' => $report->id,
+                    'path' => $path,
+                    'original_name' => $image->getClientOriginalName(),
+                ]);
+            }
         }
+
+        return redirect()
+            ->route('reports.show', $report)
+            ->with('success', 'Laporan berhasil diperbarui.');
     }
 
-    return redirect()
-        ->route('reports.show', $report)
-        ->with('success', 'Laporan berhasil diperbarui.');
-    }
-
-    /**
-     * Remove the specified resource from storage.
-     */
     public function destroy(Report $report)
     {
-        // Hapus semua file foto dari storage
-    foreach ($report->images as $image) {
-        \Illuminate\Support\Facades\Storage::disk('public')
-            ->delete($image->path);
-    }
+        Gate::authorize('delete', $report);
 
-    // Hapus laporan
-    // report_images ikut terhapus karena cascadeOnDelete()
-    $report->delete();
+        foreach ($report->images as $image) {
+            Storage::disk('public')->delete($image->path);
+        }
 
-    return redirect()
-        ->route('reports.index')
-        ->with('success', 'Laporan berhasil dihapus.');
+        $report->delete();
+
+        return redirect()
+            ->route('reports.index')
+            ->with('success', 'Laporan berhasil dihapus.');
     }
 }

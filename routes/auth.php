@@ -9,6 +9,7 @@ use App\Http\Controllers\Auth\PasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\Auth\VerifyEmailController;
+use App\Http\Controllers\Auth\EmailVerificationController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function () {
@@ -56,4 +57,15 @@ Route::middleware('auth')->group(function () {
 
     Route::post('logout', [AuthenticatedSessionController::class, 'destroy'])
         ->name('logout');
+});
+
+Route::middleware('auth')->group(function () {
+    Route::get('/verify-otp', [EmailVerificationController::class, 'show'])
+        ->name('otp.show');
+
+    Route::post('/verify-otp', [EmailVerificationController::class, 'verify'])
+        ->name('otp.verify');
+
+    Route::post('/verify-otp/resend', [EmailVerificationController::class, 'resend'])
+        ->name('otp.resend');
 });
