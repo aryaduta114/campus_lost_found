@@ -20,6 +20,7 @@ Route::get('/dashboard', [DashboardController::class, 'index'])
     ->middleware(['auth', 'email.verified'])
     ->name('dashboard');
 
+
 /*
 |--------------------------------------------------------------------------
 | User Routes
@@ -35,6 +36,9 @@ Route::middleware(['auth', 'email.verified'])->group(function () {
 
     Route::delete('/profile', [ProfileController::class, 'destroy'])
         ->name('profile.destroy');
+
+    Route::get('/reports/{report}/matches', [ReportController::class, 'matches'])
+        ->name('reports.matches');
 
     Route::resource('/reports', ReportController::class);
 

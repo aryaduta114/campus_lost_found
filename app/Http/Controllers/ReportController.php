@@ -159,6 +159,20 @@ class ReportController extends Controller
             'images',
         ]);
 
+        return view('reports.show', compact(
+            'report'
+        ));
+    }
+
+    public function matches(Report $report)
+    {
+        $report->load([
+            'user',
+            'category',
+            'location',
+            'images',
+        ]);
+
         $matches = $report->type === 'LOST'
             ? $report->lostMatches()
                 ->with([
@@ -179,7 +193,7 @@ class ReportController extends Controller
                 ->orderByDesc('score')
                 ->get();
 
-        return view('reports.show', compact(
+        return view('reports.matches', compact(
             'report',
             'matches'
         ));
